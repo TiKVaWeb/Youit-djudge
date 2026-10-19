@@ -3,6 +3,7 @@
 FROM domjudge/domserver@sha256:60660ca92ce3762e76834b49a3581c54d72ba956c698653f427582b7b1a50a5c
 USER root
 COPY webapp/src/Controller/API/ContestController.php /opt/domjudge/domserver/webapp/src/Controller/API/ContestController.php
+COPY webapp/src/Controller/API/JudgehostController.php /opt/domjudge/domserver/webapp/src/Controller/API/JudgehostController.php
 COPY webapp/src/Service/ImportProblemService.php /opt/domjudge/domserver/webapp/src/Service/ImportProblemService.php
 COPY --chmod=0755 deployment/youit/domserver/dj_setup_database /opt/domjudge/domserver/bin/dj_setup_database
 COPY deployment/youit/domserver/php-fpm-domjudge.conf /etc/php/8.3/fpm/pool.d/domjudge.conf

@@ -6,11 +6,12 @@ JUDGINGS_ROOT=${JUDGINGS_ROOT:-$MOUNT_POINT/judgings}
 THRESHOLD_PERCENT=${THRESHOLD_PERCENT:-70}
 EMERGENCY_PERCENT=${EMERGENCY_PERCENT:-90}
 MAX_AGE_MINUTES=${MAX_AGE_MINUTES:-360}
-EMERGENCY_MAX_AGE_MINUTES=${EMERGENCY_MAX_AGE_MINUTES:-60}
 MYSQL_CONTAINER=${MYSQL_CONTAINER:-mariadb}
 MYSQL_DATABASE=${MYSQL_DATABASE:-domjudge}
-LOCK_FILE=${LOCK_FILE:-/run/domjudge-clean-judgehost-cache.lock}
-DRY_RUN=0 FORCE=0 FULL=0
+LOCK_FILE=${LOCK_FILE:-/run/domjudge-maintenance.lock}
+STATE_FILE=${STATE_FILE:-/run/domjudge-cache-cleanup.state}
+MIN_RECLAIM_BYTES=${MIN_RECLAIM_BYTES:-134217728}
+DRY_RUN=0 FORCE=0 FULL=0 RESTORE_ONLY=0
 CURRENT_CONTAINER= CURRENT_HOST= DISABLED=0 STOPPED=0
 
 for arg in "$@"; do
@@ -18,6 +19,7 @@ for arg in "$@"; do
         --dry-run) DRY_RUN=1 ;;
         --force) FORCE=1 ;;
         --full) FULL=1 ;;
+        --restore-only) RESTORE_ONLY=1 ;;
         *) echo "Unknown argument: $arg" >&2; exit 2 ;;
     esac
 done
@@ -30,6 +32,7 @@ db() {
 }
 
 restore_current() {
+    local owned=$(( STOPPED || DISABLED ))
     if (( STOPPED )); then
         docker start "$CURRENT_CONTAINER" >/dev/null || return 1
         STOPPED=0
@@ -38,6 +41,22 @@ restore_current() {
         db "UPDATE judgehost SET enabled=1 WHERE hostname='$CURRENT_HOST';" || return 1
         DISABLED=0
     fi
+    if (( owned )); then rm -f -- "$STATE_FILE"; fi
+}
+
+restore_pending() {
+    [[ -f $STATE_FILE && ! -L $STATE_FILE ]] || return 0
+    if (( DRY_RUN )); then
+        echo "DRY-RUN: pending host recovery requires --restore-only without --dry-run."
+        return 0
+    fi
+    read -r CURRENT_CONTAINER CURRENT_HOST < "$STATE_FILE"
+    local index=${CURRENT_CONTAINER#judgehost-}
+    [[ $CURRENT_CONTAINER =~ ^judgehost-[0-9]+$ && $CURRENT_HOST == "judgedaemon-$index-$index" ]] || {
+        echo "Invalid maintenance recovery state; operator action required." >&2; return 1;
+    }
+    STOPPED=1 DISABLED=1
+    restore_current
 }
 
 on_exit() {
@@ -56,14 +75,14 @@ trap 'exit 143' TERM
 active_tasks() {
     db "SELECT COUNT(*) FROM judgetask jt
         JOIN judgehost h ON h.judgehostid=jt.judgehostid
-        JOIN judging_run r ON r.judgetaskid=jt.judgetaskid
-        JOIN judging j ON j.judgingid=r.judgingid
-        WHERE h.hostname='$CURRENT_HOST' AND jt.valid=1 AND j.valid=1
-          AND jt.starttime IS NOT NULL AND r.endtime IS NULL;"
+        LEFT JOIN judging_run r ON r.judgetaskid=jt.judgetaskid
+        WHERE h.hostname='$CURRENT_HOST' AND jt.valid=1
+          AND jt.starttime IS NOT NULL
+          AND (jt.type <> 'judging_run' OR r.endtime IS NULL);"
 }
 
 clean_host() {
-    local container=$1 index host_root executable_root enabled others active age=$2 resumed_at
+    local container=$1 index host_root executable_root enabled others active age=$2 resumed_at reclaim_bytes queued state_tmp
     index=${container#judgehost-}
     [[ $index =~ ^[0-9]+$ ]] || return 1
     CURRENT_CONTAINER=$container
@@ -72,10 +91,25 @@ clean_host() {
     executable_root="$JUDGINGS_ROOT/$CURRENT_HOST/endpoint-default/executable"
     [[ -d $host_root && ! -L $host_root ]] || return 0
     [[ -d $executable_root && ! -L $executable_root ]] || return 1
+    [[ $(realpath "$host_root") == "$host_root" && $(realpath "$executable_root") == "$executable_root" ]] || {
+        echo "Unexpected symlink in cache path; refusing cleanup." >&2; return 1;
+    }
     if (( ! FULL )) && [[ -z $(find "$host_root" -mindepth 1 -maxdepth 1 -type d -mmin +"$age" -print -quit) ]] && [[ -z $(find "$executable_root" -mindepth 2 -maxdepth 2 -type d -mmin +"$age" -print -quit) ]]; then
         echo "Skipping $container: no expired cache."
         return 0
     fi
+    if (( ! FULL )); then
+        reclaim_bytes=$({
+            find "$host_root" -xdev -mindepth 1 -maxdepth 1 -type d -mmin +"$age" -exec du -sk -- {} +
+            find "$executable_root" -xdev -mindepth 2 -maxdepth 2 -type d -mmin +"$age" -exec du -sk -- {} +
+        } | awk '{total += $1 * 1024} END {printf "%.0f", total}')
+        [[ $reclaim_bytes =~ ^[0-9]+$ ]] || return 1
+        if (( reclaim_bytes < MIN_RECLAIM_BYTES )); then
+            echo "Skipping $container: only ${reclaim_bytes} bytes reclaimable."; return 0;
+        fi
+    fi
+    queued=$(db "SELECT COUNT(*) FROM queuetask;")
+    [[ $queued == 0 ]] || { echo "Skipping $container: submissions are queued."; return 0; }
     enabled=$(db "SELECT enabled FROM judgehost WHERE hostname='$CURRENT_HOST';")
     [[ $enabled == 1 ]] || { echo "Skipping $container: not enabled."; return 0; }
     others=$(db "SELECT COUNT(*) FROM judgehost WHERE enabled=1
@@ -90,6 +124,11 @@ clean_host() {
         return 0
     fi
     # Disable only this host. Recheck to cover a concurrent fetch-work request.
+    # Persist intent before the first mutation so ExecStopPost can recover SIGKILL.
+    umask 077
+    state_tmp=$(mktemp "${STATE_FILE}.XXXXXX")
+    printf '%s %s\n' "$CURRENT_CONTAINER" "$CURRENT_HOST" > "$state_tmp"
+    mv -- "$state_tmp" "$STATE_FILE"
     DISABLED=1
     db "UPDATE judgehost SET enabled=0 WHERE hostname='$CURRENT_HOST';"
     sleep 2
@@ -131,15 +170,28 @@ clean_host() {
 }
 
 main() {
+    exec 9>"$LOCK_FILE"
+    if (( RESTORE_ONLY )); then
+        flock -w 180 9 || { echo "Recovery lock timeout; operator action required." >&2; return 1; }
+    else
+        flock -n 9 || { echo "Maintenance already running."; return 0; }
+    fi
+    if (( DRY_RUN )) && [[ -e $STATE_FILE ]]; then
+        echo "DRY-RUN: recovery is pending; no host state changed."; return 0;
+    fi
+    restore_pending
+    (( ! RESTORE_ONLY )) || return 0
+    for number in "$THRESHOLD_PERCENT" "$EMERGENCY_PERCENT" "$MAX_AGE_MINUTES" "$MIN_RECLAIM_BYTES"; do
+        [[ $number =~ ^[1-9][0-9]*$ ]] || { echo "Invalid maintenance configuration." >&2; return 2; }
+    done
+    (( THRESHOLD_PERCENT <= EMERGENCY_PERCENT && EMERGENCY_PERCENT <= 100 )) || return 2
     [[ $JUDGINGS_ROOT == /mnt/domjudge-judgehost/judgings && -d $JUDGINGS_ROOT && ! -L $JUDGINGS_ROOT ]] || {
         echo "Unexpected or missing judgings root; refusing cleanup." >&2; return 1;
     }
-    exec 9>"$LOCK_FILE"
-    flock -n 9 || { echo "Cleanup already running."; return 0; }
     local before after age container
     before=$(df -P "$MOUNT_POINT" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
     age=$MAX_AGE_MINUTES
-    (( before < EMERGENCY_PERCENT )) || age=$EMERGENCY_MAX_AGE_MINUTES
+    # Shared database pressure is not a reason to throw away one-hour warm caches.
     echo "Rolling cache cleanup started: disk=${before}%, full=$FULL, dry_run=$DRY_RUN."
     if (( FORCE || FULL || before >= THRESHOLD_PERCENT )); then
         while IFS= read -r container; do

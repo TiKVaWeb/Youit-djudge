@@ -1,15 +1,22 @@
 #!/bin/sh
 set -eu
 
-# Only operational logs; never touch tests, submissions, or database volumes.
+# Reporting only: truncating Docker's JSON files bypasses log rotation and
+# destroys diagnostics needed to investigate stalled submissions.
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) ;;
+    *) echo 'Only --dry-run is supported; use Docker-managed log rotation.' >&2; exit 2 ;;
+  esac
+done
 for container in domserver judgehost-0 judgehost-1 judgehost-2 judgehost-3; do
   if docker ps --format '{{.Names}}' | grep -qx "$container"; then
-    docker exec "$container" sh -lc '
-      find /opt/domjudge /var/log -xdev -type f \( -name "*.log" -o -name "access.log" -o -name "error.log" \) -size +50M -exec truncate -s 0 {} \; 2>/dev/null || true
-    ' || true
+    echo "container=$container oversized_logs:"
+    docker exec "$container" sh -c '
+      find /opt/domjudge /var/log -xdev -maxdepth 4 -type f \
+        -name "*.log" -size +50M -printf "%s %p\n" 2>/dev/null
+    '
   fi
 done
-
-find /var/lib/docker/containers -name '*-json.log' -size +50M -exec truncate -s 0 {} \; 2>/dev/null || true
-journalctl --vacuum-size=100M >/dev/null 2>&1 || true
-apt-get clean >/dev/null 2>&1 || true
+journalctl --disk-usage
+echo 'report_only=true deleted_logs=0'

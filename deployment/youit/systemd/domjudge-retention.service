@@ -1,5 +1,5 @@
 [Unit]
-Description=Prune expired DOMjudge testcase run details
+Description=Report expired DOMjudge tasks without deleting history
 After=docker.service
 Requires=docker.service
 
@@ -8,7 +8,7 @@ Type=oneshot
 Environment=DOMJUDGE_RETENTION_DAYS=30
 Environment=DOMJUDGE_RETENTION_BATCH_SIZE=2000
 Environment=DOMJUDGE_RETENTION_MAX_BATCHES=100
-ExecStart=/usr/local/sbin/domjudge-retention
+ExecStart=/usr/local/sbin/domjudge-retention --dry-run
 Nice=10
 IOSchedulingClass=best-effort
 IOSchedulingPriority=7

@@ -176,7 +176,10 @@ class JudgehostController extends AbstractFOSRestController
             ->andWhere('j.judgingid = jt.jobid')
             ->andWhere('jr.runresult IS NULL')
             ->andWhere('j.valid = 1 OR j.rejudging IS NOT NULL')
-            ->andWhere('j.result != :compiler_error')
+            // NULL is the normal result of an interrupted in-progress judging.
+            ->andWhere('(j.result IS NULL OR j.result != :compiler_error)')
+            ->andWhere('(j.endtime IS NULL OR j.judgeCompletely = 1)')
+            ->andWhere('jt.valid = 1')
             ->setParameter('hostname', $hostname)
             ->setParameter('compiler_error', 'compiler-error')
             ->getQuery()
@@ -866,6 +869,18 @@ class JudgehostController extends AbstractFOSRestController
         $judging = $this->em->getRepository(Judging::class)->find($judgingId);
         if ($judging) {
             $this->em->wrapInTransaction(function () use ($judging, $judgehost) {
+                $returnedPriority = null;
+                if ($judgehost !== null) {
+                    // Serialize recovery from multiple hosts with queue removal below.
+                    $this->em->getConnection()->executeQuery(
+                        'SELECT judgingid FROM judging WHERE judgingid = :id FOR UPDATE',
+                        ['id' => $judging->getJudgingid()]
+                    )->fetchOne();
+                    $this->em->refresh($judging);
+                    if ($judging->getEndtime() !== null && !$judging->getJudgeCompletely()) {
+                        return;
+                    }
+                }
                 /** @var JudgingRun $run */
                 foreach ($judging->getRuns() as $run) {
                     if ($judgehost === null) {
@@ -881,14 +896,33 @@ class JudgehostController extends AbstractFOSRestController
                     }
 
                     // For the other runs, we need to reset the judge task if it belongs to the current judgehost.
-                    if ($run->getJudgetask()->getJudgehost() && $run->getJudgetask()->getJudgehost()->getHostname() === $judgehost->getHostname()) {
-                        $run->getJudgetask()
+                    $task = $run->getJudgetask();
+                    if ($task !== null && $task->getValid() && $task->getJudgehost() && $task->getJudgehost()->getHostname() === $judgehost->getHostname()) {
+                        $returnedPriority = $returnedPriority === null
+                            ? $task->getPriority() : min($returnedPriority, $task->getPriority());
+                        $task
                             ->setJudgehost(null)
                             ->setStarttime(null);
                     }
                 }
 
                 $this->em->flush();
+                if ($returnedPriority !== null) {
+                    // The scheduler removes queue entries after allocating the last
+                    // batch. Returning tasks alone would leave them undiscoverable.
+                    $queueTask = $this->em->getRepository(QueueTask::class)->findOneBy(['judging' => $judging]);
+                    if ($queueTask === null) {
+                        $submission = $judging->getSubmission();
+                        $queueTask = (new QueueTask())
+                            ->setJudging($judging)
+                            ->setPriority($returnedPriority)
+                            ->setTeam($submission->getTeam())
+                            ->setTeamPriority((int)$submission->getSubmittime());
+                        $this->em->persist($queueTask);
+                    }
+                    $queueTask->setStartTime(null);
+                    $this->em->flush();
+                }
             });
 
             if ($judgehost === null) {
@@ -1828,15 +1862,23 @@ class JudgehostController extends AbstractFOSRestController
             // TODO: There is currently a race condition when a jury member requests the remaining test cases to be
             // judged in the time between allocating the final batch and the next judgehost checking in and deleting
             // the queuetask here.
-            $this->em->createQueryBuilder()
-                ->from(QueueTask::class, 'qt')
-                ->andWhere('qt.judging = :jobid')
-                ->setParameter('jobid', $jobId)
-                ->delete()
-                ->getQuery()
-                ->execute();
-            $this->em->flush();
-            $this->dj->auditlog('queuetask', $jobId, 'deleted');
+            $deleted = $this->em->getConnection()->transactional(function ($connection) use ($jobId) {
+                $connection->executeQuery(
+                    'SELECT judgingid FROM judging WHERE judgingid = :jobid FOR UPDATE',
+                    ['jobid' => $jobId]
+                )->fetchOne();
+                // Recheck after obtaining the recovery lock: a registering host
+                // may have returned tasks since our first (empty) selection.
+                return $connection->executeStatement(
+                    'DELETE FROM queuetask WHERE judgingid = :jobid AND NOT EXISTS ('
+                    . 'SELECT 1 FROM judgetask WHERE jobid = :jobid AND valid = 1 '
+                    . 'AND judgehostid IS NULL AND type = :type)',
+                    ['jobid' => $jobId, 'type' => JudgeTaskType::JUDGING_RUN]
+                );
+            });
+            if ($deleted > 0) {
+                $this->dj->auditlog('queuetask', $jobId, 'deleted');
+            }
         } else {
             return $this->serializeJudgeTasks($judgetasks, $judgehost);
         }

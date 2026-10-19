@@ -1,0 +1,18 @@
+[Unit]
+Description=Clean DOMjudge judgehost testcase cache
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+Environment=THRESHOLD_PERCENT=70
+Environment=EMERGENCY_PERCENT=90
+Environment=MAX_AGE_MINUTES=360
+Environment=EMERGENCY_MAX_AGE_MINUTES=60
+Environment=JUDGEHOST_DRAIN_TIMEOUT_SECONDS=300
+Environment=JUDGEHOST_DRAIN_POLL_SECONDS=5
+ExecStart=/usr/local/sbin/domjudge-clean-judgehost-cache
+TimeoutStartSec=10min
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

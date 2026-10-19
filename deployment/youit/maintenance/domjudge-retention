@@ -1,79 +1,32 @@
 #!/bin/bash
 set -euo pipefail
 
-readonly RETENTION_DAYS="${DOMJUDGE_RETENTION_DAYS:-30}"
-readonly BATCH_SIZE="${DOMJUDGE_RETENTION_BATCH_SIZE:-2000}"
-readonly MAX_BATCHES="${DOMJUDGE_RETENTION_MAX_BATCHES:-100}"
-readonly PAUSE_SECONDS="${DOMJUDGE_RETENTION_PAUSE_SECONDS:-0.10}"
-readonly LOCK_FILE="/run/lock/domjudge-retention.lock"
-
-if ! [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ && "$BATCH_SIZE" =~ ^[1-9][0-9]*$ && "$MAX_BATCHES" =~ ^[1-9][0-9]*$ ]]; then
-    echo "Retention settings must be positive integers" >&2
-    exit 2
-fi
-
-exec 9>"$LOCK_FILE"
-if ! flock -n 9; then
-    echo "Another retention run is active; exiting"
-    exit 0
-fi
-
-if [[ "$(docker inspect --format '{{.State.Running}}' mariadb 2>/dev/null || true)" != "true" ]]; then
-    echo "MariaDB container is not running" >&2
-    exit 1
-fi
-
-mysql_exec() {
-    docker exec -i mariadb sh -lc 'mariadb --batch --skip-column-names -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"'
-}
-
-delete_batch() {
-    mysql_exec <<SQL
-SET SESSION lock_wait_timeout=5;
-SET SESSION innodb_lock_wait_timeout=5;
-DELETE FROM judgetask
-WHERE judgetaskid IN (
-    SELECT judgetaskid
-    FROM (
-        SELECT jt.judgetaskid
-        FROM judgetask jt
-        INNER JOIN judging j ON j.judgingid = jt.jobid
-        WHERE jt.type = 'judging_run'
-          AND jt.valid = 0
-          AND j.endtime IS NOT NULL
-          AND j.endtime < UNIX_TIMESTAMP() - (${RETENTION_DAYS} * 86400)
-        ORDER BY jt.judgetaskid
-        LIMIT ${BATCH_SIZE}
-    ) AS expired
-);
-SELECT ROW_COUNT();
-SQL
-}
-
-deleted_total=0
-for ((batch = 1; batch <= MAX_BATCHES; batch++)); do
-    deleted="$(delete_batch | tail -n 1)"
-    if ! [[ "$deleted" =~ ^[0-9]+$ ]]; then
-        echo "Unexpected deleted-row count: $deleted" >&2
-        exit 1
-    fi
-
-    deleted_total=$((deleted_total + deleted))
-    if (( deleted < BATCH_SIZE )); then
-        break
-    fi
-    sleep "$PAUSE_SECONDS"
+# A judgetask DELETE cascades into judging_run and judging_run_output.
+# Reporting-only until a separately approved archival policy exists.
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) ;;
+        *) echo "Database deletion is disabled; only --dry-run is supported." >&2; exit 2 ;;
+    esac
 done
+days=${DOMJUDGE_RETENTION_DAYS:-30}
+batch=${DOMJUDGE_RETENTION_BATCH_SIZE:-2000}
+[[ $days =~ ^[1-9][0-9]*$ && $batch =~ ^[1-9][0-9]*$ ]] || {
+    echo "Retention settings must be positive integers" >&2; exit 2;
+}
+exec 9>/run/domjudge-maintenance.lock
+flock -n 9 || { echo "Another maintenance operation is active; exiting"; exit 0; }
 
-remaining="$(mysql_exec <<SQL
-SELECT COUNT(*)
+docker exec -i mariadb sh -c \
+    'MYSQL_PWD="$MYSQL_PASSWORD" exec mariadb --batch -u "$MYSQL_USER" "$MYSQL_DATABASE"' <<SQL
+SET SESSION max_statement_time=5;
+SET TRANSACTION READ ONLY;
+SELECT jt.judgetaskid, j.judgingid, j.endtime
 FROM judgetask jt
 INNER JOIN judging j ON j.judgingid = jt.jobid
-WHERE jt.type = 'judging_run'
-  AND jt.valid = 0
+WHERE jt.type = 'judging_run' AND jt.valid = 0
   AND j.endtime IS NOT NULL
-  AND j.endtime < UNIX_TIMESTAMP() - (${RETENTION_DAYS} * 86400);
+  AND j.endtime < UNIX_TIMESTAMP() - ($days * 86400)
+ORDER BY jt.judgetaskid LIMIT $batch;
 SQL
-)"
-
-echo "deleted_tasks=$deleted_total remaining_tasks=$remaining retention_days=$RETENTION_DAYS"
+echo "report_only=true deleted_tasks=0 sample_limit=$batch retention_days=$days"

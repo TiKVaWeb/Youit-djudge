@@ -4,4 +4,7 @@ Description=Clean old DOMjudge judgehost work directories
 [Service]
 Type=oneshot
 Environment=AGE_MINUTES=360
-ExecStart=/usr/local/sbin/domjudge-clean-judgehost-workdirs.sh
+ExecStart=/usr/local/sbin/domjudge-clean-judgehost-workdirs.sh --apply
+TimeoutStartSec=2min
+Nice=10
+IOSchedulingClass=idle

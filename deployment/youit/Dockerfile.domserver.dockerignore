@@ -8,5 +8,6 @@
 !webapp/src/Controller/
 !webapp/src/Controller/API/
 !webapp/src/Controller/API/ContestController.php
+!webapp/src/Controller/API/JudgehostController.php
 !webapp/src/Service/
 !webapp/src/Service/ImportProblemService.php

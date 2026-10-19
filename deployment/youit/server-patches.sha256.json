@@ -96,12 +96,14 @@
     {
       "path": "deployment/youit/maintenance/domjudge-clean-runtime-logs.sh",
       "server_path": "/usr/local/sbin/domjudge-clean-runtime-logs.sh",
-      "sha256": "72e81b43ff0cc6ba737967d100fc5c46960272705f887ffe59841c1909ff070f"
+      "sha256": "72e81b43ff0cc6ba737967d100fc5c46960272705f887ffe59841c1909ff070f",
+      "baseline_path": "deployment/youit/baseline/domjudge-clean-runtime-logs.sh"
     },
     {
       "path": "deployment/youit/systemd/domjudge-clean-runtime-logs.service",
       "server_path": "/etc/systemd/system/domjudge-clean-runtime-logs.service",
-      "sha256": "a1d156b9be22dbaf4e5fc3c8cef6ab382daaccf422ff71f72ead91f53d452816"
+      "sha256": "a1d156b9be22dbaf4e5fc3c8cef6ab382daaccf422ff71f72ead91f53d452816",
+      "baseline_path": "deployment/youit/baseline/domjudge-clean-runtime-logs.service"
     },
     {
       "path": "deployment/youit/systemd/domjudge-retention.timer",
@@ -111,17 +113,20 @@
     {
       "path": "deployment/youit/maintenance/domjudge-clean-judgehost-workdirs.sh",
       "server_path": "/usr/local/sbin/domjudge-clean-judgehost-workdirs.sh",
-      "sha256": "2b9625350c910900e584460d079fbc33d839c0f836f8c9ca5599ee741883b765"
+      "sha256": "2b9625350c910900e584460d079fbc33d839c0f836f8c9ca5599ee741883b765",
+      "baseline_path": "deployment/youit/baseline/domjudge-clean-judgehost-workdirs.sh"
     },
     {
       "path": "deployment/youit/systemd/domjudge-retention.service",
       "server_path": "/etc/systemd/system/domjudge-retention.service",
-      "sha256": "dec809f1731932e76c263fb147e1e5dba93d84f28efec55753052ce33fbf4c35"
+      "sha256": "dec809f1731932e76c263fb147e1e5dba93d84f28efec55753052ce33fbf4c35",
+      "baseline_path": "deployment/youit/baseline/domjudge-retention.service"
     },
     {
       "path": "deployment/youit/systemd/domjudge-clean-judgehost-cache.service",
       "server_path": "/etc/systemd/system/domjudge-clean-judgehost-cache.service",
-      "sha256": "164eb3dd10a2961b99822682f7d2c461e775528275a295e69944a1c27b0679d8"
+      "sha256": "164eb3dd10a2961b99822682f7d2c461e775528275a295e69944a1c27b0679d8",
+      "baseline_path": "deployment/youit/baseline/domjudge-clean-judgehost-cache.service"
     },
     {
       "path": "deployment/youit/systemd/domjudge-clean-runtime-logs.timer",
@@ -131,12 +136,14 @@
     {
       "path": "deployment/youit/maintenance/domjudge-clean-judgehost-cache",
       "server_path": "/usr/local/sbin/domjudge-clean-judgehost-cache",
-      "sha256": "67db6ec2a9516dfda62c828563eb643cc8c0723d20ce3e293786220fd0f6ef55"
+      "sha256": "67db6ec2a9516dfda62c828563eb643cc8c0723d20ce3e293786220fd0f6ef55",
+      "baseline_path": "deployment/youit/baseline/domjudge-clean-judgehost-cache"
     },
     {
       "path": "deployment/youit/maintenance/domjudge-retention",
       "server_path": "/usr/local/sbin/domjudge-retention",
-      "sha256": "4b07161fdf9382fd73554decfd784840f82029638bbbf6ae1c6159d12135d1cc"
+      "sha256": "4b07161fdf9382fd73554decfd784840f82029638bbbf6ae1c6159d12135d1cc",
+      "baseline_path": "deployment/youit/baseline/domjudge-retention"
     },
     {
       "path": "deployment/youit/systemd/domjudge-clean-judgehost-workdirs.timer",
@@ -146,7 +153,8 @@
     {
       "path": "deployment/youit/systemd/domjudge-clean-judgehost-workdirs.service",
       "server_path": "/etc/systemd/system/domjudge-clean-judgehost-workdirs.service",
-      "sha256": "7a410a3c1c469ae5aca9abff20ff0e6ac873f27649a817eaae8ec783b47e4833"
+      "sha256": "7a410a3c1c469ae5aca9abff20ff0e6ac873f27649a817eaae8ec783b47e4833",
+      "baseline_path": "deployment/youit/baseline/domjudge-clean-judgehost-workdirs.service"
     }
   ]
 }

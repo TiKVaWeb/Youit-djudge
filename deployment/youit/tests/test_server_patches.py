@@ -18,7 +18,7 @@ class SnapshotTests(unittest.TestCase):
         for entry in manifest["files"]:
             with self.subTest(path=entry["path"]):
                 self.assertEqual(
-                    hashlib.sha256((ROOT / entry["path"]).read_bytes()).hexdigest(),
+                    hashlib.sha256((ROOT / entry.get("baseline_path", entry["path"])).read_bytes()).hexdigest(),
                     entry["sha256"],
                 )
 

@@ -1,0 +1,21 @@
+# Apply only as part of a separately verified rollout, never to a new volume.
+# Docker performs rotation; do not truncate /var/lib/docker/containers manually.
+x-logging: &bounded-logs
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  domserver:
+    logging: *bounded-logs
+  mariadb:
+    logging: *bounded-logs
+  judgehost-0:
+    logging: *bounded-logs
+  judgehost-1:
+    logging: *bounded-logs
+  judgehost-2:
+    logging: *bounded-logs
+  judgehost-3:
+    logging: *bounded-logs

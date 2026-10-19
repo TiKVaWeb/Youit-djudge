@@ -1,0 +1,155 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+MOUNT_POINT=${MOUNT_POINT:-/mnt/domjudge-judgehost}
+JUDGINGS_ROOT=${JUDGINGS_ROOT:-$MOUNT_POINT/judgings}
+THRESHOLD_PERCENT=${THRESHOLD_PERCENT:-70}
+EMERGENCY_PERCENT=${EMERGENCY_PERCENT:-90}
+MAX_AGE_MINUTES=${MAX_AGE_MINUTES:-360}
+EMERGENCY_MAX_AGE_MINUTES=${EMERGENCY_MAX_AGE_MINUTES:-60}
+MYSQL_CONTAINER=${MYSQL_CONTAINER:-mariadb}
+MYSQL_DATABASE=${MYSQL_DATABASE:-domjudge}
+LOCK_FILE=${LOCK_FILE:-/run/domjudge-clean-judgehost-cache.lock}
+DRY_RUN=0 FORCE=0 FULL=0
+CURRENT_CONTAINER= CURRENT_HOST= DISABLED=0 STOPPED=0
+
+for arg in "$@"; do
+    case "$arg" in
+        --dry-run) DRY_RUN=1 ;;
+        --force) FORCE=1 ;;
+        --full) FULL=1 ;;
+        *) echo "Unknown argument: $arg" >&2; exit 2 ;;
+    esac
+done
+
+db() {
+    # Resolve credentials inside the database container, never in host argv/logs.
+    docker exec "$MYSQL_CONTAINER" sh -c \
+        'MYSQL_PWD="$MYSQL_PASSWORD" exec mariadb -N -s -u domjudge "$1" -e "$2"' \
+        sh "$MYSQL_DATABASE" "$1"
+}
+
+restore_current() {
+    if (( STOPPED )); then
+        docker start "$CURRENT_CONTAINER" >/dev/null || return 1
+        STOPPED=0
+    fi
+    if (( DISABLED )); then
+        db "UPDATE judgehost SET enabled=1 WHERE hostname='$CURRENT_HOST';" || return 1
+        DISABLED=0
+    fi
+}
+
+on_exit() {
+    local status=$?
+    trap - EXIT INT TERM
+    if ! restore_current; then
+        echo "ERROR: could not restore $CURRENT_CONTAINER; operator action required." >&2
+        exit 1
+    fi
+    exit "$status"
+}
+trap on_exit EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+active_tasks() {
+    db "SELECT COUNT(*) FROM judgetask jt
+        JOIN judgehost h ON h.judgehostid=jt.judgehostid
+        JOIN judging_run r ON r.judgetaskid=jt.judgetaskid
+        JOIN judging j ON j.judgingid=r.judgingid
+        WHERE h.hostname='$CURRENT_HOST' AND jt.valid=1 AND j.valid=1
+          AND jt.starttime IS NOT NULL AND r.endtime IS NULL;"
+}
+
+clean_host() {
+    local container=$1 index host_root executable_root enabled others active age=$2 resumed_at
+    index=${container#judgehost-}
+    [[ $index =~ ^[0-9]+$ ]] || return 1
+    CURRENT_CONTAINER=$container
+    CURRENT_HOST="judgedaemon-$index-$index"
+    host_root="$JUDGINGS_ROOT/$CURRENT_HOST/endpoint-default/testcase"
+    executable_root="$JUDGINGS_ROOT/$CURRENT_HOST/endpoint-default/executable"
+    [[ -d $host_root && ! -L $host_root ]] || return 0
+    [[ -d $executable_root && ! -L $executable_root ]] || return 1
+    if (( ! FULL )) && [[ -z $(find "$host_root" -mindepth 1 -maxdepth 1 -type d -mmin +"$age" -print -quit) ]] && [[ -z $(find "$executable_root" -mindepth 2 -maxdepth 2 -type d -mmin +"$age" -print -quit) ]]; then
+        echo "Skipping $container: no expired cache."
+        return 0
+    fi
+    enabled=$(db "SELECT enabled FROM judgehost WHERE hostname='$CURRENT_HOST';")
+    [[ $enabled == 1 ]] || { echo "Skipping $container: not enabled."; return 0; }
+    others=$(db "SELECT COUNT(*) FROM judgehost WHERE enabled=1
+        AND hostname<>'$CURRENT_HOST' AND polltime>UNIX_TIMESTAMP()-30;")
+    [[ $others =~ ^[0-9]+$ ]] && (( others >= 1 )) || {
+        echo "Skipping $container: no other healthy enabled judgehost."; return 0;
+    }
+    active=$(active_tasks)
+    [[ $active == 0 ]] || { echo "Skipping $container: active tasks=$active."; return 0; }
+    if (( DRY_RUN )); then
+        echo "DRY-RUN rolling cleanup $container (full=$FULL, age=${age}m)."
+        return 0
+    fi
+    # Disable only this host. Recheck to cover a concurrent fetch-work request.
+    DISABLED=1
+    db "UPDATE judgehost SET enabled=0 WHERE hostname='$CURRENT_HOST';"
+    sleep 2
+    active=$(active_tasks)
+    if [[ $active != 0 ]]; then
+        echo "Skipping $container: work arrived during drain (active=$active)."
+        restore_current
+        return 0
+    fi
+    STOPPED=1
+    docker stop --time 30 "$container" >/dev/null
+    # No running process can read this host's cache while it is being removed.
+    if (( FULL )); then
+        find "$host_root" -mindepth 1 -maxdepth 1 -type d ! -type l -exec rm -rf -- {} +
+        find "$executable_root" -xdev -mindepth 1 -delete
+    else
+        find "$host_root" -mindepth 1 -maxdepth 1 -type d ! -type l -mmin +"$age" -exec rm -rf -- {} +
+        # Compiled checkers are rebuildable. Only remove their version directories
+        # while this host is drained and stopped, just like the testcase cache.
+        find "$executable_root" -xdev -mindepth 2 -maxdepth 2 -type d ! -type l -mmin +"$age" -exec rm -rf -- {} +
+    fi
+    chown 1001:1001 "$host_root"
+    chmod 755 "$host_root"
+    resumed_at=$(date +%s)
+    restore_current
+    # Avoid taking the next host out until this one is polling again.
+    local attempt poll_age
+    for attempt in {1..15}; do
+        poll_age=$(db "SELECT COUNT(*) FROM judgehost WHERE hostname='$CURRENT_HOST'
+            AND enabled=1 AND polltime >= $resumed_at;")
+        if [[ $poll_age == 1 ]]; then
+            echo "Cleaned $container; polling restored."
+            return 0
+        fi
+        sleep 2
+    done
+    echo "ERROR: $container did not resume polling; stopping cleanup." >&2
+    return 1
+}
+
+main() {
+    [[ $JUDGINGS_ROOT == /mnt/domjudge-judgehost/judgings && -d $JUDGINGS_ROOT && ! -L $JUDGINGS_ROOT ]] || {
+        echo "Unexpected or missing judgings root; refusing cleanup." >&2; return 1;
+    }
+    exec 9>"$LOCK_FILE"
+    flock -n 9 || { echo "Cleanup already running."; return 0; }
+    local before after age container
+    before=$(df -P "$MOUNT_POINT" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+    age=$MAX_AGE_MINUTES
+    (( before < EMERGENCY_PERCENT )) || age=$EMERGENCY_MAX_AGE_MINUTES
+    echo "Rolling cache cleanup started: disk=${before}%, full=$FULL, dry_run=$DRY_RUN."
+    if (( FORCE || FULL || before >= THRESHOLD_PERCENT )); then
+        while IFS= read -r container; do
+            clean_host "$container" "$age"
+        done < <(docker ps --format '{{.Names}}' | grep -E '^judgehost-[0-9]+$' | sort || true)
+    fi
+    after=$(df -P "$MOUNT_POINT" | awk 'NR==2 {gsub(/%/, "", $5); print $5}')
+    echo "Rolling cache cleanup finished: usage_before=${before}%, usage_after=${after}%."
+    if (( after >= EMERGENCY_PERCENT )); then
+        echo "WARNING: disk remains above ${EMERGENCY_PERCENT}%; expand storage/investigate database. Warm cache is not automatically purged."
+    fi
+}
+main
