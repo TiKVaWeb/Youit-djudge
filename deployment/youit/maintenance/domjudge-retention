@@ -1,0 +1,79 @@
+#!/bin/bash
+set -euo pipefail
+
+readonly RETENTION_DAYS="${DOMJUDGE_RETENTION_DAYS:-30}"
+readonly BATCH_SIZE="${DOMJUDGE_RETENTION_BATCH_SIZE:-2000}"
+readonly MAX_BATCHES="${DOMJUDGE_RETENTION_MAX_BATCHES:-100}"
+readonly PAUSE_SECONDS="${DOMJUDGE_RETENTION_PAUSE_SECONDS:-0.10}"
+readonly LOCK_FILE="/run/lock/domjudge-retention.lock"
+
+if ! [[ "$RETENTION_DAYS" =~ ^[1-9][0-9]*$ && "$BATCH_SIZE" =~ ^[1-9][0-9]*$ && "$MAX_BATCHES" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Retention settings must be positive integers" >&2
+    exit 2
+fi
+
+exec 9>"$LOCK_FILE"
+if ! flock -n 9; then
+    echo "Another retention run is active; exiting"
+    exit 0
+fi
+
+if [[ "$(docker inspect --format '{{.State.Running}}' mariadb 2>/dev/null || true)" != "true" ]]; then
+    echo "MariaDB container is not running" >&2
+    exit 1
+fi
+
+mysql_exec() {
+    docker exec -i mariadb sh -lc 'mariadb --batch --skip-column-names -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" "$MYSQL_DATABASE"'
+}
+
+delete_batch() {
+    mysql_exec <<SQL
+SET SESSION lock_wait_timeout=5;
+SET SESSION innodb_lock_wait_timeout=5;
+DELETE FROM judgetask
+WHERE judgetaskid IN (
+    SELECT judgetaskid
+    FROM (
+        SELECT jt.judgetaskid
+        FROM judgetask jt
+        INNER JOIN judging j ON j.judgingid = jt.jobid
+        WHERE jt.type = 'judging_run'
+          AND jt.valid = 0
+          AND j.endtime IS NOT NULL
+          AND j.endtime < UNIX_TIMESTAMP() - (${RETENTION_DAYS} * 86400)
+        ORDER BY jt.judgetaskid
+        LIMIT ${BATCH_SIZE}
+    ) AS expired
+);
+SELECT ROW_COUNT();
+SQL
+}
+
+deleted_total=0
+for ((batch = 1; batch <= MAX_BATCHES; batch++)); do
+    deleted="$(delete_batch | tail -n 1)"
+    if ! [[ "$deleted" =~ ^[0-9]+$ ]]; then
+        echo "Unexpected deleted-row count: $deleted" >&2
+        exit 1
+    fi
+
+    deleted_total=$((deleted_total + deleted))
+    if (( deleted < BATCH_SIZE )); then
+        break
+    fi
+    sleep "$PAUSE_SECONDS"
+done
+
+remaining="$(mysql_exec <<SQL
+SELECT COUNT(*)
+FROM judgetask jt
+INNER JOIN judging j ON j.judgingid = jt.jobid
+WHERE jt.type = 'judging_run'
+  AND jt.valid = 0
+  AND j.endtime IS NOT NULL
+  AND j.endtime < UNIX_TIMESTAMP() - (${RETENTION_DAYS} * 86400);
+SQL
+)"
+
+echo "deleted_tasks=$deleted_total remaining_tasks=$remaining retention_days=$RETENTION_DAYS"

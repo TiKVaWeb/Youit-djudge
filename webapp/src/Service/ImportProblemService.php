@@ -534,7 +534,13 @@ class ImportProblemService
                 $type = 'txt';
             }
 
-            $finfo = new \finfo();
+            // The attachment type is a display hint limited to four characters.
+            // Preserve the original filename, content and MIME type for downloads.
+            if (strlen($type) > 4) {
+                $type = 'bin';
+            }
+
+            $finfo = new \finfo(FILEINFO_MIME_TYPE);
             $mime = $finfo->buffer($content);
             $mime = explode(';', $mime)[0];
 

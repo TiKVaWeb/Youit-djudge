@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily DOMjudge testcase run retention
+
+[Timer]
+OnCalendar=*-*-* 03:30:00
+Persistent=true
+RandomizedDelaySec=15m
+Unit=domjudge-retention.service
+
+[Install]
+WantedBy=timers.target

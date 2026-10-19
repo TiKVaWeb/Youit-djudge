@@ -1,0 +1,152 @@
+{
+  "upstream_tag": "9.0.0",
+  "upstream_commit": "d8c018e4c6ec050b0089f178976ba1129307beb3",
+  "audit_date": "2026-10-19",
+  "files": [
+    {
+      "path": "webapp/src/Controller/API/ContestController.php",
+      "server_path": "/root/domjudge-docker/overrides/domserver/ContestController.php",
+      "sha256": "858864b196963dfae4d7468616885aad70e63908db7aed3680e357e22e6db145"
+    },
+    {
+      "path": "webapp/src/Service/ImportProblemService.php",
+      "server_path": "/root/domjudge-docker/overrides/domserver/ImportProblemService.php",
+      "sha256": "6498ae84027ed7245bf173ab4badb70040a827f709607ab0cc226bfbfbba74b6"
+    },
+    {
+      "path": "judge/judgedaemon.main.php",
+      "server_path": "/root/domjudge-docker/overrides/judgehost/judgedaemon.main.php",
+      "sha256": "af6439957e9e49627249f9f7d39c5f7c1006df26bf5001b3814ded526d1dd4de"
+    },
+    {
+      "path": "deployment/youit/domserver/dj_setup_database",
+      "server_path": "/root/domjudge-docker/overrides/domserver/dj_setup_database",
+      "sha256": "1d7813943a64e72da4d57ef8de41418a6b5a4a6174891ca97f623e50aae125b7"
+    },
+    {
+      "path": "deployment/youit/domserver/php-fpm-domjudge.conf",
+      "server_path": "/root/domjudge-docker/overrides/domserver/php-fpm-domjudge.conf",
+      "sha256": "5e9a3e276acfd3bf8830989a361c81ab25a9a8c3367b70da51a7c30ce8c06f8e"
+    },
+    {
+      "path": "deployment/youit/domserver/php-fpm-domjudge-feed.conf",
+      "server_path": "/root/domjudge-docker/overrides/domserver/php-fpm-domjudge-feed.conf",
+      "sha256": "162bc799f9a4897d035e73f85211f452e405029caf994722b1b1b3651e36e5e2"
+    },
+    {
+      "path": "deployment/youit/domserver/nginx-domjudge-event-feed",
+      "server_path": "/root/domjudge-docker/overrides/domserver/nginx-domjudge-event-feed",
+      "sha256": "c7da3bb2aa8d3750f734fc64b143d80d916e3f6026b091d3746956447f1f8d72"
+    },
+    {
+      "path": "deployment/youit/domserver/95-event-feed-pool.sh",
+      "server_path": "/root/domjudge-docker/overrides/domserver/95-event-feed-pool.sh",
+      "sha256": "f9d27b6a07ddbf7ff9b49c5956d8bd228b573cd72871f69f00f4018db0aef12a"
+    },
+    {
+      "path": "judge/pascal/prepare.php",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/prepare.php",
+      "sha256": "c5bcc3c5394d814d49d2023629c3d1086f5f38f0e9e8ce0b22cfe15386b5860c"
+    },
+    {
+      "path": "judge/pascal/run-testlib",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/run-testlib",
+      "sha256": "17ec6a17df54b1bd35e60796091e8b32b6b7f7d6e766db37c6d596f8a2d3f21f"
+    },
+    {
+      "path": "judge/pascal/test.php",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/test.php",
+      "sha256": "5abe9a29f0a601c4184c93acfaf64411afe10d99ca39333b16ed89b9390c8917"
+    },
+    {
+      "path": "judge/pascal/vendor/COPYING",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/vendor/COPYING",
+      "sha256": "dcc100d4161cc0b7177545ab6e47216f84857cda3843847c792a25289852dcaa"
+    },
+    {
+      "path": "judge/pascal/vendor/NOTICE.md",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/vendor/NOTICE.md",
+      "sha256": "92d70440ced33de3888925d6f19a290ce1b89faaed47f902d0ffea7703e5154a"
+    },
+    {
+      "path": "judge/pascal/vendor/testlib.pas",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/vendor/testlib.pas",
+      "sha256": "dfc33f055d80d0116d522ee3d6b4c943d91c6528175a7d5a2f773302e0e9240d"
+    },
+    {
+      "path": "deployment/youit/pascal/Dockerfile",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/Dockerfile",
+      "sha256": "b238fc563403c2ce53a26c9f4ec5c944be57775ceb4d499470e6e239d8389555"
+    },
+    {
+      "path": "deployment/youit/pascal/README.md",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/README.md",
+      "sha256": "69bd2801449089ed11abd4a605a429d90f21af4d5aaf74a2826b3c05e62fe272"
+    },
+    {
+      "path": "deployment/youit/pascal/pascal-executables.patch",
+      "server_path": "/root/domjudge-docker/build-20260929/pascal/pascal-executables.patch",
+      "sha256": "e715982498337edbad2b2fcd4337cbd9ebba151505d2760652673215f2e108bf"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-clean-judgehost-cache.timer",
+      "server_path": "/etc/systemd/system/domjudge-clean-judgehost-cache.timer",
+      "sha256": "0f4b862f9fe502308f04e9725ad0435d276f793540036c04f0d131372a5b0b14"
+    },
+    {
+      "path": "deployment/youit/maintenance/domjudge-clean-runtime-logs.sh",
+      "server_path": "/usr/local/sbin/domjudge-clean-runtime-logs.sh",
+      "sha256": "72e81b43ff0cc6ba737967d100fc5c46960272705f887ffe59841c1909ff070f"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-clean-runtime-logs.service",
+      "server_path": "/etc/systemd/system/domjudge-clean-runtime-logs.service",
+      "sha256": "a1d156b9be22dbaf4e5fc3c8cef6ab382daaccf422ff71f72ead91f53d452816"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-retention.timer",
+      "server_path": "/etc/systemd/system/domjudge-retention.timer",
+      "sha256": "3f19004dc859dde8eca868f8fecb125103549850988aa9f46f262bcb0bbc271e"
+    },
+    {
+      "path": "deployment/youit/maintenance/domjudge-clean-judgehost-workdirs.sh",
+      "server_path": "/usr/local/sbin/domjudge-clean-judgehost-workdirs.sh",
+      "sha256": "2b9625350c910900e584460d079fbc33d839c0f836f8c9ca5599ee741883b765"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-retention.service",
+      "server_path": "/etc/systemd/system/domjudge-retention.service",
+      "sha256": "dec809f1731932e76c263fb147e1e5dba93d84f28efec55753052ce33fbf4c35"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-clean-judgehost-cache.service",
+      "server_path": "/etc/systemd/system/domjudge-clean-judgehost-cache.service",
+      "sha256": "164eb3dd10a2961b99822682f7d2c461e775528275a295e69944a1c27b0679d8"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-clean-runtime-logs.timer",
+      "server_path": "/etc/systemd/system/domjudge-clean-runtime-logs.timer",
+      "sha256": "2942c2deb270d4222da7e163ebd797b7faaa7615d8f9450a815b24c2da40c5ec"
+    },
+    {
+      "path": "deployment/youit/maintenance/domjudge-clean-judgehost-cache",
+      "server_path": "/usr/local/sbin/domjudge-clean-judgehost-cache",
+      "sha256": "67db6ec2a9516dfda62c828563eb643cc8c0723d20ce3e293786220fd0f6ef55"
+    },
+    {
+      "path": "deployment/youit/maintenance/domjudge-retention",
+      "server_path": "/usr/local/sbin/domjudge-retention",
+      "sha256": "4b07161fdf9382fd73554decfd784840f82029638bbbf6ae1c6159d12135d1cc"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-clean-judgehost-workdirs.timer",
+      "server_path": "/etc/systemd/system/domjudge-clean-judgehost-workdirs.timer",
+      "sha256": "2d1f8ed26cea8d112cd8b9ab5d2cd168fd975c67a58f08c52094bfc5e97a99bf"
+    },
+    {
+      "path": "deployment/youit/systemd/domjudge-clean-judgehost-workdirs.service",
+      "server_path": "/etc/systemd/system/domjudge-clean-judgehost-workdirs.service",
+      "sha256": "7a410a3c1c469ae5aca9abff20ff0e6ac873f27649a817eaae8ec783b47e4833"
+    }
+  ]
+}

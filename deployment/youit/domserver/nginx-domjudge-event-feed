@@ -1,0 +1,13 @@
+# Separate long-lived feeds from submission intake and judgehost polling.
+location ~ ^/api/v4/contests/[^/]+/event-feed/?$ {
+    fastcgi_pass unix:/var/run/php-fpm-domjudge-feed.sock;
+    include fastcgi_params;
+    fastcgi_param SERVER_NAME $host;
+    fastcgi_param SCRIPT_FILENAME $domjudgeRoot/index.php;
+    fastcgi_param SCRIPT_NAME $prefix/index.php;
+    fastcgi_param REQUEST_URI $prefix$uri?$args;
+    fastcgi_param DOCUMENT_ROOT $domjudgeRoot;
+    fastcgi_param HTTPS $fastcgi_param_https_variable;
+    fastcgi_buffering off;
+    fastcgi_read_timeout 360s;
+}

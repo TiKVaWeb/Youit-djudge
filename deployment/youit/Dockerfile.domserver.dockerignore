@@ -1,0 +1,12 @@
+**
+!deployment/
+!deployment/youit/
+!deployment/youit/domserver/
+!deployment/youit/domserver/**
+!webapp/
+!webapp/src/
+!webapp/src/Controller/
+!webapp/src/Controller/API/
+!webapp/src/Controller/API/ContestController.php
+!webapp/src/Service/
+!webapp/src/Service/ImportProblemService.php

@@ -1,0 +1,15 @@
+[Unit]
+Description=Prune expired DOMjudge testcase run details
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+Environment=DOMJUDGE_RETENTION_DAYS=30
+Environment=DOMJUDGE_RETENTION_BATCH_SIZE=2000
+Environment=DOMJUDGE_RETENTION_MAX_BATCHES=100
+ExecStart=/usr/local/sbin/domjudge-retention
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=45min

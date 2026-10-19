@@ -1,0 +1,11 @@
+[Unit]
+Description=Daily DOMjudge runtime log cleanup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=20m
+Unit=domjudge-clean-runtime-logs.service
+
+[Install]
+WantedBy=timers.target

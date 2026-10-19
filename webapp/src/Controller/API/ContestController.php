@@ -721,32 +721,41 @@ class ContestController extends AbstractRestController
 
             $missingEventRetries = 0;
             while (true) {
+                // A historical scan can cross many filtered batches or ID gaps.
+                // Keep streaming clients alive even before the next matching event.
+                if ($stream && $lastUpdate + 10 < Utils::now()) {
+                    echo "\n";
+                    Utils::ob_flush_if_possible();
+                    flush();
+                    $lastUpdate = Utils::now();
+                }
                 // Add missing state events that should have happened already.
                 $this->eventLogService->addMissingStateEvents($contest);
 
-                // We fetch *all* events from the last seen to check that
+                // Scan global IDs in bounded batches to check that
                 // we don't skip events that are committed out of order.
                 // This includes the last seen event itself, just to check
                 // that the database is consistent and, for example, has
                 // not been reloaded while this process is (long) running.
                 $q = $this->em->createQueryBuilder()
                     ->from(Event::class, 'e')
-                    ->select('e')
+                    ->select('e.eventid')
                     ->andWhere('e.eventid >= :lastIdSent')
                     ->setParameter('lastIdSent', $lastIdSent)
                     ->orderBy('e.eventid', 'ASC')
+                    ->setMaxResults(1001)
                     ->getQuery();
 
-                /** @var Event[] $events */
-                $events = $q->getResult();
+                // Do not hydrate content (or unrelated contests) while scanning.
+                $eventIds = array_map('intval', array_column($q->getScalarResult(), 'eventid'));
 
                 if ($lastIdExists) {
-                    if (count($events) == 0 || $events[0]->getEventid() !== $lastIdSent) {
+                    if (count($eventIds) == 0 || $eventIds[0] !== $lastIdSent) {
                         throw new HttpException(500, sprintf('Cannot find event %d in database anymore', $lastIdSent));
                     }
                     // Remove the previously last sent event. We just fetched
                     // it to make sure it's there.
-                    unset($events[0]);
+                    array_shift($eventIds);
                 }
 
                 // Look for any missing sequential events and wait for them to
@@ -754,10 +763,10 @@ class ContestController extends AbstractRestController
                 $missingEvents = false;
                 $expectedId = $lastIdSent + 1;
                 $lastFoundId = null;
-                foreach ($events as $event) {
-                    if ($event->getEventid() !== $expectedId) {
+                foreach ($eventIds as $eventId) {
+                    if ($eventId !== $expectedId) {
                         $missingEvents = true;
-                        $lastFoundId = $event->getEventid();
+                        $lastFoundId = $eventId;
                         break;
                     }
                     $expectedId++;
@@ -787,6 +796,26 @@ class ContestController extends AbstractRestController
                     );
                 }
                 $missingEventRetries = 0;
+
+                if ($missingEvents) {
+                    // Stop after the first gap even when that event is filtered out.
+                    $eventIds = array_slice($eventIds, 0, array_search($lastFoundId, $eventIds, true) + 1);
+                }
+                $events = [];
+                if ($eventIds !== []) {
+                    $eventsQuery = $this->em->createQueryBuilder()
+                        ->from(Event::class, 'e')
+                        ->select('e')
+                        ->andWhere('e.eventid IN (:ids)')
+                        ->andWhere('e.contest = :contest')
+                        ->setParameter('ids', $eventIds)
+                        ->setParameter('contest', $contest)
+                        ->orderBy('e.eventid', 'ASC');
+                    if ($typeFilter !== false) {
+                        $eventsQuery->andWhere('e.endpointtype IN (:types)')->setParameter('types', $typeFilter);
+                    }
+                    $events = $eventsQuery->getQuery()->getResult();
+                }
 
                 $numEventsSent = 0;
                 foreach ($events as $event) {
@@ -884,6 +913,21 @@ class ContestController extends AbstractRestController
                         // any potential gaps after this last emitted event.
                         break;
                     }
+                }
+
+                // Doctrine otherwise retains every hydrated event for the lifetime
+                // of a streaming connection, even after the batch has been sent.
+                foreach ($events as $event) {
+                    $this->em->detach($event);
+                }
+                unset($events, $event);
+
+                if ($eventIds !== []) {
+                    // Advance over filtered events too. Output tokens remain the
+                    // original event IDs and can still be used when reconnecting.
+                    $lastIdSent = $eventIds[count($eventIds) - 1];
+                    $lastIdExists = true;
+                    continue;
                 }
 
                 if ($numEventsSent == 0) {

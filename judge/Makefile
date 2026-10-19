@@ -30,6 +30,11 @@ install-judgehost:
 		judgedaemon.main.php run-interactive.sh
 	$(INSTALL_PROG) -t $(DESTDIR)$(judgehost_bindir) \
 		judgedaemon runguard runpipe create_cgroups
+	$(INSTALL_DIR) $(DESTDIR)$(judgehost_libjudgedir)/pascal/vendor
+	$(INSTALL_DATA) -t $(DESTDIR)$(judgehost_libjudgedir)/pascal pascal/prepare.php
+	$(INSTALL_PROG) -t $(DESTDIR)$(judgehost_libjudgedir)/pascal pascal/run-testlib
+	$(INSTALL_DATA) -t $(DESTDIR)$(judgehost_libjudgedir)/pascal/vendor \
+		pascal/vendor/testlib.pas pascal/vendor/COPYING pascal/vendor/NOTICE.md
 
 clean-l:
 	-rm -f $(TARGETS) $(TARGETS:%=%$(OBJEXT))

@@ -1,0 +1,35 @@
+--- a/judgedaemon.main.php
++++ b/judgedaemon.main.php
+@@ -423,9 +423,17 @@
+                     }
+                 }
+                 if ($execlang === false) {
+-                    return [null, "executable must either provide an executable file named 'build' or a C/C++/Java or Python file.", null];
++                    return [null, "executable must either provide an executable file named 'build' or a C/C++/Java/Python/Pascal file.", null];
+                 }
+                 switch ($execlang) {
++                    case 'pas':
++                        require_once LIBJUDGEDIR . '/pascal/prepare.php';
++                        try {
++                            $buildscript = preparePascalExecutable($execbuilddir, $type);
++                        } catch (RuntimeException $e) {
++                            return [null, $e->getMessage(), null];
++                        }
++                        break;
+                     case 'c':
+                         $buildscript .= "gcc -Wall -O2 -std=gnu11 $source -o run -lm\n";
+                         break;
+@@ -678,11 +686,12 @@
+     'cpp' => ['cpp', 'C', 'cc'],
+     'java' => ['java'],
+     'py' => ['py'],
++    'pas' => ['dpr', 'pas', 'pp', 'DPR', 'PAS', 'PP'],
+ ];
+ $domserver_languages = dj_json_decode(request('languages', 'GET'));
+ foreach ($domserver_languages as $language) {
+     $id = $language['id'];
+-    if (key_exists($id, $langexts)) {
++    if (key_exists($id, $langexts) && $id !== 'pas') {
+         $langexts[$id] = $language['extensions'];
+     }
+ }

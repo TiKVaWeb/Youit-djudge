@@ -423,14 +423,22 @@ function fetch_executable_internal(
                     }
                 }
                 if ($execlang === false) {
-                    return [null, "executable must either provide an executable file named 'build' or a C/C++/Java or Python file.", null];
+                    return [null, "executable must either provide an executable file named 'build' or a C/C++/Java/Python/Pascal file.", null];
                 }
                 switch ($execlang) {
+                    case 'pas':
+                        require_once LIBJUDGEDIR . '/pascal/prepare.php';
+                        try {
+                            $buildscript = preparePascalExecutable($execbuilddir, $type);
+                        } catch (RuntimeException $e) {
+                            return [null, $e->getMessage(), null];
+                        }
+                        break;
                     case 'c':
                         $buildscript .= "gcc -Wall -O2 -std=gnu11 $source -o run -lm\n";
                         break;
                     case 'cpp':
-                        $buildscript .= "g++ -Wall -O2 -std=gnu++20 $source -o run\n";
+                        $buildscript .= "g++ -Wall -O2 -std=gnu++23 $source -o run\n";
                         break;
                     case 'java':
                         $buildscript .= "javac -cp . -d . $source\n";
@@ -678,11 +686,12 @@ $langexts = [
     'cpp' => ['cpp', 'C', 'cc'],
     'java' => ['java'],
     'py' => ['py'],
+    'pas' => ['dpr', 'pas', 'pp', 'DPR', 'PAS', 'PP'],
 ];
 $domserver_languages = dj_json_decode(request('languages', 'GET'));
 foreach ($domserver_languages as $language) {
     $id = $language['id'];
-    if (key_exists($id, $langexts)) {
+    if (key_exists($id, $langexts) && $id !== 'pas') {
         $langexts[$id] = $language['extensions'];
     }
 }
@@ -765,6 +774,27 @@ while (true) {
                 logmsg(LOG_INFO, "🗑 Cleaned up $cnt old judging directories; reduced disk space by " .
                     sprintf("%01.2fMB.", ($after - $before) / (1024 * 1024))
                 );
+
+                // Testcase input/output files are a derived cache and can be
+                // downloaded again from the domserver. Reclaim it only when
+                // deleting completed judging directories was not sufficient.
+                if ($after < 1024 * $allowed_free_space) {
+                    $cachePath = $workdirpath . '/testcase';
+                    $cacheBefore = $after;
+                    logmsg(LOG_INFO, "  - deleting testcase cache '$cachePath'");
+                    system('rm -rf -- ' . dj_escapeshellarg($cachePath), $retval);
+                    if ($retval !== 0) {
+                        logmsg(LOG_WARNING, "Deleting testcase cache '$cachePath' was unsuccessful.");
+                    } elseif (!mkdir($cachePath, 0700, true) && !is_dir($cachePath)) {
+                        logmsg(LOG_WARNING, "Recreating testcase cache '$cachePath' was unsuccessful.");
+                    } else {
+                        chmod($cachePath, 0700);
+                    }
+                    $after = disk_free_space(JUDGEDIR);
+                    logmsg(LOG_INFO, "🗑 Cleared testcase cache; increased free space by " .
+                        sprintf("%01.2fMB.", ($after - $cacheBefore) / (1024 * 1024))
+                    );
+                }
             }
             if ($after < 1024*$allowed_free_space) {
                 $free_abs = sprintf("%01.2fGB", $after / (1024*1024*1024));

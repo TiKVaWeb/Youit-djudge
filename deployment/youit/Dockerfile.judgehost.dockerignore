@@ -1,0 +1,8 @@
+**
+!judge/
+!judge/judgedaemon.main.php
+!judge/pascal/
+!judge/pascal/prepare.php
+!judge/pascal/run-testlib
+!judge/pascal/vendor/
+!judge/pascal/vendor/**

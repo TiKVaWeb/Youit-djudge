@@ -1,0 +1,10 @@
+[Unit]
+Description=Clean DOMjudge runtime logs and host journal
+Documentation=man:journalctl(1)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/domjudge-clean-runtime-logs.sh
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7

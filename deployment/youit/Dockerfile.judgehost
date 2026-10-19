@@ -1,0 +1,10 @@
+# Compatibility image, not an upstream version upgrade.
+FROM domjudge/judgehost@sha256:24304474590c5a62c5395589407ce8a996e7dd694832d24a29d2eb0014e15da5
+USER root
+RUN cp /etc/resolv.conf /chroot/domjudge/etc/resolv.conf \
+    && chroot /chroot/domjudge /bin/sh -c 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends fp-compiler fp-units-rtl && apt-get clean && rm -rf /var/lib/apt/lists/*' \
+    && chroot /chroot/domjudge /usr/bin/fpc -iV
+COPY judge/judgedaemon.main.php /opt/domjudge/judgehost/lib/judge/judgedaemon.main.php
+COPY judge/pascal/prepare.php /opt/domjudge/judgehost/lib/judge/pascal/prepare.php
+COPY --chmod=0755 judge/pascal/run-testlib /opt/domjudge/judgehost/lib/judge/pascal/run-testlib
+COPY judge/pascal/vendor/ /opt/domjudge/judgehost/lib/judge/pascal/vendor/

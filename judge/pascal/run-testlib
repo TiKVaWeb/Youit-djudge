@@ -1,0 +1,25 @@
+#!/bin/sh
+# Adapt classic Pascal testlib (input, team output, jury answer) to DOMjudge.
+set -eu
+if [ "$#" -ne 3 ]; then
+    echo 'Pascal testlib checker requires input, answer and feedback directory' >&2
+    exit 1
+fi
+checker_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+umask 077
+team_output=$(mktemp "$3/.pascal-output.XXXXXX")
+trap 'rm -f -- "$team_output"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+cat > "$team_output"
+result=0
+"$checker_dir/checker.bin" "$1" "$team_output" "$2" > "$3/judgemessage.txt" 2>&1 || result=$?
+case "$result" in
+    0) exit 42 ;;
+    1|2|4) exit 43 ;;
+    *)
+        cp "$3/judgemessage.txt" "$3/judgeerror.txt"
+        printf '\nPascal checker failed with exit status %s\n' "$result" >> "$3/judgeerror.txt"
+        exit 1
+        ;;
+esac

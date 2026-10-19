@@ -1,0 +1,11 @@
+# Compatibility image: preserve the production base and apply audited overrides.
+# Build from the repository root; this does not install or run production services.
+FROM domjudge/domserver@sha256:60660ca92ce3762e76834b49a3581c54d72ba956c698653f427582b7b1a50a5c
+USER root
+COPY webapp/src/Controller/API/ContestController.php /opt/domjudge/domserver/webapp/src/Controller/API/ContestController.php
+COPY webapp/src/Service/ImportProblemService.php /opt/domjudge/domserver/webapp/src/Service/ImportProblemService.php
+COPY --chmod=0755 deployment/youit/domserver/dj_setup_database /opt/domjudge/domserver/bin/dj_setup_database
+COPY deployment/youit/domserver/php-fpm-domjudge.conf /etc/php/8.3/fpm/pool.d/domjudge.conf
+COPY deployment/youit/domserver/php-fpm-domjudge-feed.conf /etc/php/8.3/fpm/pool.d/domjudge-feed.conf
+COPY deployment/youit/domserver/nginx-domjudge-event-feed /etc/nginx/snippets/domjudge-event-feed
+COPY --chmod=0755 deployment/youit/domserver/95-event-feed-pool.sh /scripts/start.ro/95-event-feed-pool.sh

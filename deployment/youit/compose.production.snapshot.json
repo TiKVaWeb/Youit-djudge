@@ -1,0 +1,453 @@
+{
+  "name": "youit-domjudge",
+  "networks": {
+    "domjudge": {
+      "name": "domjudge",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "domserver": {
+      "command": null,
+      "container_name": "domserver",
+      "depends_on": {
+        "mariadb": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "CONTAINER_TIMEZONE": "Europe/Moscow",
+        "DOMJUDGE_SKIP_REFRESH_CACHE_ON_UPGRADE": "1",
+        "MYSQL_DATABASE": "domjudge",
+        "MYSQL_HOST": "mariadb",
+        "MYSQL_PASSWORD": "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD outside Git}",
+        "MYSQL_ROOT_PASSWORD": "${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD outside Git}",
+        "MYSQL_USER": "domjudge",
+        "TZ": "Europe/Moscow"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "curl",
+          "-fsS",
+          "http://localhost/"
+        ],
+        "timeout": "5s",
+        "interval": "15s",
+        "retries": 20
+      },
+      "image": "domjudge/domserver@sha256:60660ca92ce3762e76834b49a3581c54d72ba956c698653f427582b7b1a50a5c",
+      "networks": {
+        "domjudge": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "192.168.0.250",
+          "target": 80,
+          "published": "12345",
+          "protocol": "tcp"
+        }
+      ],
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/etc/localtime",
+          "target": "/etc/localtime",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/domserver/dj_setup_database",
+          "target": "/opt/domjudge/domserver/bin/dj_setup_database",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/domserver/php-fpm-domjudge.conf",
+          "target": "/etc/php/8.3/fpm/pool.d/domjudge.conf",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/domserver/php-fpm-domjudge-feed.conf",
+          "target": "/etc/php/8.3/fpm/pool.d/domjudge-feed.conf",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/domserver/nginx-domjudge-event-feed",
+          "target": "/etc/nginx/snippets/domjudge-event-feed",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/domserver/95-event-feed-pool.sh",
+          "target": "/scripts/start.ro/95-event-feed-pool.sh",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/domserver/ImportProblemService.php",
+          "target": "/opt/domjudge/domserver/webapp/src/Service/ImportProblemService.php",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/domserver/ContestController.php",
+          "target": "/opt/domjudge/domserver/webapp/src/Controller/API/ContestController.php",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        }
+      ]
+    },
+    "judgehost-0": {
+      "cgroup": "host",
+      "command": null,
+      "container_name": "judgehost-0",
+      "depends_on": {
+        "domserver": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "CONTAINER_TIMEZONE": "Europe/Moscow",
+        "DAEMON_ID": "0",
+        "JUDGEDAEMON_PASSWORD": "${JUDGEDAEMON_PASSWORD:?Set JUDGEDAEMON_PASSWORD outside Git}",
+        "TZ": "Europe/Moscow"
+      },
+      "hostname": "judgedaemon-0",
+      "image": "youit-judgehost:pascal-20260929-r2",
+      "networks": {
+        "domjudge": null
+      },
+      "privileged": true,
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/sys/fs/cgroup",
+          "target": "/sys/fs/cgroup",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/etc/localtime",
+          "target": "/etc/localtime",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/mnt/domjudge-judgehost/judgings",
+          "target": "/opt/domjudge/judgehost/judgings",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/judgehost/judgedaemon.main.php",
+          "target": "/opt/domjudge/judgehost/lib/judge/judgedaemon.main.php",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        }
+      ]
+    },
+    "judgehost-1": {
+      "cgroup": "host",
+      "command": null,
+      "container_name": "judgehost-1",
+      "depends_on": {
+        "domserver": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "CONTAINER_TIMEZONE": "Europe/Moscow",
+        "DAEMON_ID": "1",
+        "JUDGEDAEMON_PASSWORD": "${JUDGEDAEMON_PASSWORD:?Set JUDGEDAEMON_PASSWORD outside Git}",
+        "TZ": "Europe/Moscow"
+      },
+      "hostname": "judgedaemon-1",
+      "image": "youit-judgehost:pascal-20260929-r2",
+      "networks": {
+        "domjudge": null
+      },
+      "privileged": true,
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/sys/fs/cgroup",
+          "target": "/sys/fs/cgroup",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/etc/localtime",
+          "target": "/etc/localtime",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/mnt/domjudge-judgehost/judgings",
+          "target": "/opt/domjudge/judgehost/judgings",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/judgehost/judgedaemon.main.php",
+          "target": "/opt/domjudge/judgehost/lib/judge/judgedaemon.main.php",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        }
+      ]
+    },
+    "judgehost-2": {
+      "cgroup": "host",
+      "command": null,
+      "container_name": "judgehost-2",
+      "depends_on": {
+        "domserver": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "CONTAINER_TIMEZONE": "Europe/Moscow",
+        "DAEMON_ID": "2",
+        "JUDGEDAEMON_PASSWORD": "${JUDGEDAEMON_PASSWORD:?Set JUDGEDAEMON_PASSWORD outside Git}",
+        "TZ": "Europe/Moscow"
+      },
+      "hostname": "judgedaemon-2",
+      "image": "youit-judgehost:pascal-20260929-r2",
+      "networks": {
+        "domjudge": null
+      },
+      "privileged": true,
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/sys/fs/cgroup",
+          "target": "/sys/fs/cgroup",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/etc/localtime",
+          "target": "/etc/localtime",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/mnt/domjudge-judgehost/judgings",
+          "target": "/opt/domjudge/judgehost/judgings",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/judgehost/judgedaemon.main.php",
+          "target": "/opt/domjudge/judgehost/lib/judge/judgedaemon.main.php",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        }
+      ]
+    },
+    "judgehost-3": {
+      "cgroup": "host",
+      "command": null,
+      "container_name": "judgehost-3",
+      "depends_on": {
+        "domserver": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "CONTAINER_TIMEZONE": "Europe/Moscow",
+        "DAEMON_ID": "3",
+        "JUDGEDAEMON_PASSWORD": "${JUDGEDAEMON_PASSWORD:?Set JUDGEDAEMON_PASSWORD outside Git}",
+        "TZ": "Europe/Moscow"
+      },
+      "hostname": "judgedaemon-3",
+      "image": "youit-judgehost:pascal-20260929-r2",
+      "networks": {
+        "domjudge": null
+      },
+      "privileged": true,
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/sys/fs/cgroup",
+          "target": "/sys/fs/cgroup",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/etc/localtime",
+          "target": "/etc/localtime",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/mnt/domjudge-judgehost/judgings",
+          "target": "/opt/domjudge/judgehost/judgings",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/root/domjudge-docker/overrides/judgehost/judgedaemon.main.php",
+          "target": "/opt/domjudge/judgehost/lib/judge/judgedaemon.main.php",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        }
+      ]
+    },
+    "mariadb": {
+      "command": [
+        "--max-connections=1000",
+        "--default-time-zone=+03:00",
+        "--innodb_snapshot_isolation=OFF",
+        "--innodb-log-file-size=256M",
+        "--innodb-buffer-pool-size=2G",
+        "--max-allowed-packet=256M",
+        "--tmpdir=/var/lib/mysql-tmp",
+        "--innodb-compression-default=ON",
+        "--innodb-compression-algorithm=zlib",
+        "--innodb-compression-level=6"
+      ],
+      "container_name": "mariadb",
+      "entrypoint": null,
+      "environment": {
+        "CONTAINER_TIMEZONE": "Europe/Moscow",
+        "MYSQL_DATABASE": "domjudge",
+        "MYSQL_PASSWORD": "${MYSQL_PASSWORD:?Set MYSQL_PASSWORD outside Git}",
+        "MYSQL_ROOT_PASSWORD": "${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD outside Git}",
+        "MYSQL_USER": "domjudge",
+        "TZ": "Europe/Moscow"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "mariadb-admin ping -h 127.0.0.1 -u root -p\"$$MYSQL_ROOT_PASSWORD\" --silent"
+        ],
+        "timeout": "5s",
+        "interval": "10s",
+        "retries": 10
+      },
+      "image": "mariadb@sha256:5b6a1eac15b85b981a61afb89aea2a22bf76b5f58809d05f0bcc13ab6ec44cb8",
+      "networks": {
+        "domjudge": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "192.168.0.250",
+          "target": 3306,
+          "published": "13306",
+          "protocol": "tcp"
+        }
+      ],
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "db-data",
+          "target": "/var/lib/mysql",
+          "volume": {}
+        },
+        {
+          "type": "bind",
+          "source": "/mnt/domjudge-judgehost/mysql-tmp",
+          "target": "/var/lib/mysql-tmp",
+          "bind": {
+            "create_host_path": true
+          }
+        },
+        {
+          "type": "bind",
+          "source": "/etc/localtime",
+          "target": "/etc/localtime",
+          "read_only": true,
+          "bind": {
+            "create_host_path": true
+          }
+        }
+      ]
+    }
+  },
+  "volumes": {
+    "db-data": {
+      "name": "domjudge-docker_db-data",
+      "external": true
+    }
+  }
+}
